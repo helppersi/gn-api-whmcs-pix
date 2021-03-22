@@ -1,6 +1,6 @@
 <?php
 
-require 'gerencianetpix/sdk/vendor/autoload.php';
+require 'gerencianetpix/gerencianet-sdk/autoload.php';
 
 use WHMCS\Database\Capsule;
 use Gerencianet\Gerencianet;
