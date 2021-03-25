@@ -2,7 +2,8 @@
 
 require_once __DIR__ . '/../../../init.php';
 
-use WHMCS\Database\Capsule;
+include_once 'gerencianetpix/gerencianetpix_lib/database_interaction.php';
+include_once 'gerencianetpix/gerencianetpix_lib/handler/exception_handler.php';
 
 App::load_function('gateway');
 App::load_function('invoice');
@@ -20,58 +21,56 @@ if (!$gatewayParams['type']) {
 
 // Hook data retrieving
 @ob_clean();
-$postdata = json_decode(file_get_contents('php://input'));
+$postData = json_decode(file_get_contents('php://input'));
 
 // Hook validation
-if(isset($postdata->evento) && isset($postdata->data_criacao)) {
+if (isset($postData->evento) && isset($postData->data_criacao)) {
     header('HTTP/1.0 200 OK');
 
     exit();
 }
 
+$pixPaymentData = $postData->pix;
+
 // Hook manipulation
-if (isset($postdata->pix)) {
-	header('HTTP/1.0 200 OK');
+if (empty($pixPaymentData)) {
+    showException('Exception', array('Pagamento Pix não recebido pelo Webhook.'));
 
-    $success = false;
-    $pixData = $postdata->pix;
-
-    $txid = $pixData[0]->txid;
+} else {
+    header('HTTP/1.0 200 OK');
 
     $tableName = 'tblgerencianetpix';
-    $invoiceId = Capsule::table($tableName)
-                    ->where('txid', $txid)
-                    ->value('invoiceid');
+    $txID  = $pixPaymentData[0]->txid;
+    $e2eID = $pixPaymentData[0]->endToEndId;
 
-    Capsule::table($tableName)
-        ->where('invoiceid', $invoiceId)
-        ->update(
-            [
-                'e2eid' => $pixData[0]->endToEndId,
-            ]
-        );
+    $success = !empty($e2eID);
 
-    /**
-     * Validate Callback Invoice ID.
-     *
-     * Checks invoice ID is a valid invoice number. Note it will count an
-     * invoice in any status as valid.
-     *
-     * Performs a die upon encountering an invalid Invoice ID.
-     *
-     * Returns a normalised invoice ID.
-     *
-     * @param int $invoiceId Invoice ID
-     * @param string $gatewayName Gateway Name
-     */
-    $invoiceId = checkCbInvoiceID($invoiceId, $gatewayParams['name']); // VALIDAÇÃO DO INVOICE ID
+    // Retrieving Invoice ID from 'tblgerencianetpix'
+    $savedInvoice = find($tableName, 'txid', $txID);
 
-    $paymentFee = '0.00';
-    $paymentAmount = $pixData[0]->valor;
-
-    $success = isset($invoiceId);
-
-    if($success) {
-        addInvoicePayment($invoiceId, $transactionId, $paymentAmount, $paymentFee, $gatewayModuleName);
+    // Checking if the invoice has already been paid
+    if (empty($savedInvoice['e2eid'])) {
+        // Validate Callback Invoice ID
+        $invoiceID = checkCbInvoiceID($savedInvoice['invoiceid'], $gatewayParams['name']);
+    
+        $conditions = [
+            'invoiceid' => $invoiceID,
+        ];
+        $dataToUpdate = [
+            'e2eid' => $e2eID,
+        ];
+    
+        // Saving e2eid in table 'tblgerencianetpix'
+        update($tableName, $conditions, $dataToUpdate);
+    
+        if($success) {
+            $paymentFee = '0.00';
+            $paymentAmount = $pixPaymentData[0]->valor;
+    
+            addInvoicePayment($invoiceID, $txID, $paymentAmount, $paymentFee, $gatewayModuleName);
+    
+        } else {
+            showException('Exception', array("Pagamento Pix não efetuado para a Fatura #$invoiceID"));
+        }
     }
 }

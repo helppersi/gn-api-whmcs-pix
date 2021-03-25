@@ -1,10 +1,10 @@
 <?php
 
 require 'gerencianetpix/gerencianet-sdk/autoload.php';
-
-use WHMCS\Database\Capsule;
-use Gerencianet\Gerencianet;
-use Gerencianet\Exception\GerencianetException;
+include_once 'gerencianetpix/gerencianetpix_lib/api_interaction.php';
+include_once 'gerencianetpix/gerencianetpix_lib/database_interaction.php';
+include_once 'gerencianetpix/gerencianetpix_lib/handler/exception_handler.php';
+include_once 'gerencianetpix/gerencianetpix_lib/functions/gateway_functions.php';
 
 if (!defined('WHMCS')) {
     die('This file cannot be accessed directly');
@@ -32,7 +32,8 @@ if (!defined('WHMCS')) {
  *
  * @return array
  */
-function gerencianetpix_config() {
+function gerencianetpix_config()
+{
     return array(
         'FriendlyName' => array(
             'Type' => 'System',
@@ -121,176 +122,42 @@ function gerencianetpix_config() {
  * Defines the HTML output displayed on an invoice. Typically consists of an
  * HTML form that will take the user to the payment gateway endpoint.
  *
- * @param array $params Payment Gateway Module Parameters
+ * @param array $gatewayParams Payment Gateway Module Parameters
  *
  * @see https://developers.whmcs.com/payment-gateways/third-party-gateway/
  *
  * @return string
  */
-function gerencianetpix_link($params) {
+function gerencianetpix_link($gatewayParams)
+{
     //  Validate if required parameters are empty
-    validateRequiredParams($params);
+    validateRequiredParams($gatewayParams);
 
     // Getting API Instance
-    $api_instance = getGerencianetApiInstance($params);
+    $api_instance = getGerencianetApiInstance($gatewayParams);
 
-    // Creating 'tblgerencianetpix' table
+    // Creating table 'tblgerencianetpix'
     createGerencianetPixTable();
 
     // Verifying if exists a Pix Charge for current invoiceId
-    $existingPixCharge = retrievePixInfo($params['invoiceid']);
+    $existingPixCharge = getPixCharge($gatewayParams['invoiceid']);
     
-    if (!isset($existingPixCharge)) {
+    if (empty($existingPixCharge)) {
         // Creating a new Pix Charge
-        $newPixCharge = createImmediateCharge($api_instance, $params);
+        $newPixCharge = createPixCharge($api_instance, $gatewayParams);
     
         if (isset($newPixCharge['txid'])) {
-            // Storing Pix Charge Infos on 'tblgerencianetpix' table for later use
-            storePixInfo($newPixCharge, $params);
+            // Storing Pix Charge Infos on table 'tblgerencianetpix' for later use
+            storePixChargeInfo($newPixCharge, $gatewayParams);
     
-            // Configurating Webhook
-            configWebhook($api_instance, $params);
+            // Creating Webhook
+            createWebhook($api_instance, $gatewayParams);
         }
     }
 
-    // Generate QR Code
+    // Generating QR Code
     $locId = $existingPixCharge ? $existingPixCharge['locid'] : $newPixCharge['loc']['id'];
-    $qrcode = generateQRCode($api_instance, $locId);
-
-    return generateQrCodeTemplate($qrcode);
-}
-
-/**
- * Create a Pix Charge
- * 
- * @param \Gerencianet\Endpoints $api_instance Gerencianet API Instance
- * @param array $params Payment Gateway Module Parameters
- * 
- * @return array Generated Pix Charge
- */
-function createImmediateCharge($api_instance, $params) {
-    // Pix Parameters
-    $pixKey         = $params['pixKey'];
-    $pixDays        = $params['pixDays'];
-    $pixDescription = $params['description'];
-
-    if (empty($pixKey)) {
-        showException('Exception', array('Chave Pix não informada. Verificar as configurações do Portal de Pagamento.'));
-    }
-
-    // Calculating discount value
-    $pixDiscount = str_replace('%', '', $params['pixDiscount']) / 100;
-
-    // Calculating pix amount with discount
-    $pixAmount = $params['amount'] * (1 - $pixDiscount);
-
-    $requestBody = [
-        'calendario' => [
-            'expiracao' => $pixDays * 86400 // Multiplying by 86400 (1 day seconds) because the API expects to receive a value in seconds
-        ],
-        'valor' => [
-            'original' => strval($pixAmount) // String value from amount
-        ],
-        'chave' => $pixKey,
-        'solicitacaoPagador' => $pixDescription
-    ];
-
-    // Pix Charge Creation Request
-    try {        
-        $pixCharge = $api_instance->pixCreateImmediateCharge([], $requestBody);
-
-        return $pixCharge;
-
-    } catch (GerencianetException $e) {
-        showException('Gerencianet Exception', array($e));
-
-    } catch (Exception $e) {
-        showException('Exception', array($e));
-    }
-
-}
-
-/**
- * Create 'tblgerencianetpix' table
- */
-function createGerencianetPixTable() {
-    if(!Capsule::schema()->hasTable('tblgerencianetpix')) {
-        try {
-            Capsule::schema()->create(
-                'tblgerencianetpix',
-                function ($table) {
-                    $table->increments('id');
-                    $table->integer('invoiceid');
-                    $table->string('txid');
-                    $table->string('e2eid');
-                    $table->integer('locid');
-                }
-            );
-    
-        } catch (\Exception $e) {
-            showException('DataBase Exception', array($e->getMessage()));
-        }
-    }
-}
-
-/**
- * Generate QR Code for a Pix Charge
- * 
- * @param \Gerencianet\Endpoints $api_instance Gerencianet API Instance
- * @param int $locId Location ID to generate QR Code
- * 
- * @return array Generated QR Code
- */
-function generateQRCode($api_instance, $locId) {
-    $requestParams = [
-        'id' => $locId
-    ];
-
-    // QR Code Generation Request
-    try {
-        $qrcode = $api_instance->pixGenerateQRCode($requestParams);
-
-        return $qrcode;
-
-    } catch (GerencianetException $e) {
-        showException('Gerencianet Exception', array($e));
-
-    } catch (Exception $e) {
-        showException('Exception', array($e));
-    }
-}
-
-/**
- * Configure WebhookUrl for a Pix Charge
- * 
- * @param \Gerencianet\Endpoints $api_instance Gerencianet API Instance
- * @param array $params Payment Gateway Module Parameters
- * 
- */
-function configWebhook($api_instance, $params) {
-    // System Parameters
-    $moduleName  = $params['paymentmethod'];
-    $systemUrl   = $params['systemurl'];
-    $callbackUrl = $systemUrl . 'modules/gateways/callback/' . $moduleName . '.php';
-
-    $requestParams = [
-        'chave' => $params['pixKey']
-    ];
-
-    $requestBody = [
-        'webhookUrl' => $callbackUrl
-    ];
-
-    // Pix Webhook Config Request
-    try {
-        $api_instance->pixConfigWebhook($requestParams, $requestBody);
-
-    } catch (GerencianetException $e) {
-        showException('Gerencianet Exception', array($e));
-
-    } catch (Exception $e) {
-        showException('Exception', array($e));
-    }
+    return createQRCode($api_instance, $locId);
 }
 
 /**
@@ -298,184 +165,26 @@ function configWebhook($api_instance, $params) {
  *
  * Called when a refund is requested for a previously successful transaction
  *
- * @param array $params Payment Gateway Module Parameters
+ * @param array $gatewayParams Payment Gateway Module Parameters
  *
  * @see https://developers.whmcs.com/payment-gateways/refunds/
  *
  * @return array Transaction response status
  */
-function gerencianetpix_refund($params) {
-    //  Validate if required parameters are empty
-    validateRequiredParams($params);
+function gerencianetpix_refund($gatewayParams)
+{
+    //  Validating if required parameters are empty
+    validateRequiredParams($gatewayParams);
 
     // Getting API Instance
-    $api_instance = getGerencianetApiInstance($params);
+    $api_instance = getGerencianetApiInstance($gatewayParams);
 
-    $requestParams = [
-        'e2eId' => retrievePixInfo($params['invoiceid'])['e2eid'],
-        'id' => uniqid()
-    ];
-
-    $requestBody = [
-        'valor' => $params['amount']
-    ];
-
-    // Pix Devolution Request
-    try {
-        $responseData = $api_instance->pixDevolution($requestParams, $requestBody);
-
-    } catch (GerencianetException $e) {
-        showException('Gerencianet Exception', array($e));
-
-    } catch (Exception $e) {
-        showException('Exception', array($e));
-    }
-
+    // Refunding Pix Charge
+    $responseData = refundCharge($api_instance, $gatewayParams);
+    
     return array(
         'status' => $responseData['rtrId'] ? 'success' : 'error',
         'rawdata' => $responseData,
-        'transid' => $responseData['rtrId'],
+        'transid' => $responseData['rtrId'] ? $responseData['rtrId'] : 'Not Refunded',
     );
-}
-
-/**
- * Validate if required parameters are empty
- * 
- * @param array $params Payment Gateway Module Parameters
- */
-function validateRequiredParams($params) {
-    $requiredParams = array(
-        'clientIdProd'        => $params['clientIdProd'],
-        'clientSecretProd'    => $params['clientSecretProd'],
-        'clientIdSandbox'     => $params['clientIdSandbox'],
-        'clientSecretSandbox' => $params['clientSecretSandbox'],
-    );
-
-    $errors = array();
-
-    foreach ($requiredParams as $key => $value) {
-        if (empty($value)) {
-            $errors[] = $key . ' é um campo obrigatório. Verificar as configurações do Portal de Pagamento.';
-        };
-    };
-
-    if (!empty($errors)) {
-        showException('Exception', $errors);
-    }
-}
-
-/**
- * Store Pix Info
- * 
- * @param array $pix Pix Charge
- * @param array $params Payment Gateway Module Parameters
- */
-function storePixInfo($pix, $params) {
-    $txId      = $pix['txid'];
-    $locId     = $pix['loc']['id'];
-    $invoiceId = $params['invoiceid'];
-
-    try {
-        Capsule::table('tblgerencianetpix')
-            ->insert(
-                [
-                    'invoiceid' => $invoiceId,
-                    'txid' => $txId,
-                    'locid' => $locId,
-                ]
-            );
-
-    } catch (\Exception $e) {    
-        showException('DataBase Exception', array($e->getMessage()));
-    }
-}
-
-/**
- * Retrieve Pix Charge Infos
- * 
- * @param int $invoiceId Invoice ID
- * 
- * @return array Pix Charge Infos
- */
-function retrievePixInfo($invoiceId) {
-    try {
-        $data = Capsule::table('tblgerencianetpix')
-            ->where('invoiceid', $invoiceId)
-            ->first();
-
-        return json_decode(json_encode($data), true);
-
-    } catch (\Exception $e) {
-        showException('DataBase Exception', array($e->getMessage()));
-    }
-}
-
-/**
- * Show Exceptions
- * 
- * @param string $type Exception type
- * @param array $exceptions Array of exceptions to show
- */
-function showException($type, $exceptions) {
-    $errorPage = new \WHMCS\View\HtmlErrorPage();
-
-    // Append error to template body
-    foreach($exceptions as $exception) {
-        $errorPage->body .= "<li style=\"padding: 10px 0px;\"><b>{$type}: </b>{$exception}</li>";
-    }
-
-    $html = $errorPage->getHtmlErrorPage();
-
-    die($html);
-}
-
-/**
- * Retrieve Genrencianet API Instance
- * 
- * @param array $params Payment Gateway Module Parameters
- * 
- * @return \Gerencianet\Endpoints $api_instance Gerencianet API Instance
- */
-function getGerencianetApiInstance($params) {    
-    $mtls    = ($params['mtls'] == 'on');
-    $debug   = ($params['debug'] == 'on');
-    $sandbox = ($params['sandbox'] == 'on');
-
-    // Getting API Instance
-    $api_instance = Gerencianet::getInstance(
-        array(
-            'client_id' => $sandbox ? $params['clientIdSandbox'] : $params['clientIdProd'],
-            'client_secret' => $sandbox ? $params['clientSecretSandbox'] : $params['clientSecretProd'],
-            'pix_cert' => $params['pixCert'],
-            'sandbox' => $sandbox,
-            'debug' => $debug,
-            'headers' => [
-                'x-skip-mtls-checking' => $mtls ? 'true' : 'false' // Needs to be string
-            ]
-        )
-    );
-
-    return $api_instance;
-}
-
-/**
- * Generate QR Code Template including copy button
- * 
- * @param array $qrcode QR Code to generate template from
- * 
- * @return string $template Template
- */
-function generateQrCodeTemplate($qrcode) {
-    // QR Code image
-    $qrcodeImage = "<img src=\"{$qrcode['imagemQrcode']}\" />\n";
-
-    // Copy button 
-    $copyButton = "<button class=\"btn btn-default\" id=\"copyButton\" onclick=\"copyQrCode('{$qrcode['qrcode']}')\">Copiar QR Code</button>\n";
-
-    // Script for Copy action
-    $script = "<script type=\"text/javascript\" src=\"/whmcs/modules/gateways/gerencianetpix/gerencianetpix_lib/scripts/js/copyQrCode.js\"></script>";
-
-    $template = $qrcodeImage.$copyButton.$script;
-
-    return $template;
 }
