@@ -7,16 +7,19 @@
 2. Descompacte o arquivo baixado;
 3. Copie o arquivo gerencianetpix.php e a pasta gerencianetpix, para o diretório /modules/gateways da instalação do WHMCS;
 4. Copie o arquivo gerencianetpix.php, disponível no diretório callback/pix, para o diretório modules/gateways/callback. Ele deve seguir o modelo modules/gateways/callback/gerencianetpix.php;
+5. Copie o arquivo gerencianet.php, disponível no diretório /hooks, para o diretório includes/hooks. Ele deverá seguir o modelo includes/hooks/gerencianet.php;
 
 Os arquivos do módulo Gerencianet devem seguir a seguinte estrutura no WHMCS:
 
 ```
+includes/hooks/
+  |- gerencianet.php
  modules/gateways/
   |- callback/gerencianetpix.php
   |  gerencianetpix/
   |  gerencianetpix.php
 ```
-5. Crie uma pasta na raiz do seu servidor e insira seu certificado .pem na pasta.
+6. Crie uma pasta na raiz do seu servidor e insira seu certificado .pem na pasta.
 
 Obs: O passo 6 é opcional, devendo ser seguido apenas se o administrador do WHMCS desejar que as faturas atualizadas no WHMCS também tenham seu status atualizados automaticamente na Gerencianet.
 
@@ -32,4 +35,4 @@ Obs: O passo 6 é opcional, devendo ser seguido apenas se o administrador do WHM
 7. **Certificado Pix** Deve ser preenchido com o caminho do certificado salvo em seu servidor;
 8. **Desconto:** Informe o valor de desconto que deverá ser aplicado ao pix gerado exclusivamente pela Gerencianet;
 9. **Validade da Cobrança** Deve ser informado o período de validade em dias da cobrança PIX;
-10.**Mtls** Entenda os riscos de não configurar o mTLS acessando o link https://gnetbr.com/rke4baDVyd.
+10. **Mtls** Entenda os riscos de não configurar o mTLS acessando o link https://gnetbr.com/rke4baDVyd.
