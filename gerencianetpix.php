@@ -149,9 +149,6 @@ function gerencianetpix_link($gatewayParams)
         if (isset($newPixCharge['txid'])) {
             // Storing Pix Charge Infos on table 'tblgerencianetpix' for later use
             storePixChargeInfo($newPixCharge, $gatewayParams);
-    
-            // Creating Webhook
-            createWebhook($api_instance, $gatewayParams);
         }
     }
 
