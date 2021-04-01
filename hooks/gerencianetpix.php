@@ -15,7 +15,11 @@ add_hook('CartTotalAdjustment', 1, function($vars) {
 
     $cart_adjustments = [];
 
-    if($vars['paymentmethod'] == PAYMENT_METHOD) {
+    // Carrega os valores das configurações do Gateway
+    $paramsGateway = getGatewayVariables(PAYMENT_METHOD);
+    $pixDiscount = str_replace('%', '', $paramsGateway['pixDiscount']);
+
+    if($vars['paymentmethod'] == PAYMENT_METHOD && $pixDiscount > 0) {
 
         // Busca o id da moeda BRL
         $result = Capsule::table('tblcurrencies') 
@@ -24,15 +28,15 @@ add_hook('CartTotalAdjustment', 1, function($vars) {
         $idBRL = $result->id;
 
         if (!empty($idBRL)) {
-            // Carrega os valores das configurações do Gateway
-            $paramsGateway = getGatewayVariables(PAYMENT_METHOD);
-            $pixDiscount = str_replace('%', '', $paramsGateway['pixDiscount']);
             
             $products = [];
             foreach ($vars['products'] as $product) {
-
                 // Valor por padrão, é armazenado na coluna 'monthly' da tabela de preço
-                $billingcycle = $product['billingcycle'] == 'onetime' ? 'monthly' : $product['billingcycle'];
+                if(empty($product['billingcycle']) || $product['billingcycle'] == 'onetime') {
+                    $billingcycle = 'monthly';
+                } else {
+                    $billingcycle = $product['billingcycle'];
+                }
                 
                 // Não verifica o valor do item, se ele for free 
                 if($billingcycle != 'freeaccount') {

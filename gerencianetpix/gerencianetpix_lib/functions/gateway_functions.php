@@ -171,9 +171,13 @@ function generateQRCodeTemplate($qrcode)
     // Copy button 
     $copyButton = "<button class='btn btn-default' id='copyButton' onclick=\"copyQrCode('{$qrcode['qrcode']}')\">Copiar QR Code</button>\n";
 
-    // Script for Copy action
-    $script = '<script type="text/javascript" src="/whmcs/modules/gateways/gerencianetpix/gerencianetpix_lib/scripts/js/copyQrCode.js"></script>';
+    // get config gateway
+    $paramsGateway = getGatewayVariables('gerencianetpix');
+    $baseUrl = $paramsGateway['systemurl'];
 
+    // Script for Copy action
+    $script = "<script type=\"text/javascript\" src=\"$baseUrl/modules/gateways/gerencianetpix/gerencianetpix_lib/scripts/js/copyQrCode.js\"></script>";
+   
     $template = $qrcodeImage.$copyButton.$script;
 
     return $template;
