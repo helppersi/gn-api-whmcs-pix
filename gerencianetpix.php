@@ -1,6 +1,9 @@
 <?php
 
-require 'gerencianetpix/gerencianet-sdk/autoload.php';
+if (!class_exists('Gerencianet\Gerencianet')) {
+    include_once('gerencianetpix/gerencianet-sdk/autoload.php');
+} 
+
 include_once 'gerencianetpix/gerencianetpix_lib/api_interaction.php';
 include_once 'gerencianetpix/gerencianetpix_lib/database_interaction.php';
 include_once 'gerencianetpix/gerencianetpix_lib/handler/exception_handler.php';

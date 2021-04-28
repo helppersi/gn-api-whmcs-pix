@@ -38,39 +38,6 @@ function createTable($tableName, Closure $callback)
 }
 
 /**
- * Set the columns to be selected
- *
- * @param string  $tableName
- * @param array   $conditions
- * @param array   $fields
- * @param boolean $getFirst
- * 
- * @return array
- */
-function select($tableName, $conditions, $fields, $getFirst = true)
-{
-    try {
-        $gerencianetData = Capsule::table($tableName);
-
-        foreach ($conditions as $key => $value) {
-            $gerencianetData = $gerencianetData->where($key, $value);
-        }
-
-        if ($getFirst) {
-            $data = $gerencianetData->select($fields)->first();
-        }
-        else {
-            $data = $gerencianetData->select($fields)->get();
-        }
-
-        return json_decode(json_encode($data), true);
-
-    } catch (\Exception $e) {
-        showException('DataBase Exception', array($e->getMessage()));
-    }
-}
-
-/**
  * Execute a query for a single record by ID
  * 
  * @param string  $tableName
@@ -125,7 +92,7 @@ function getValue($tableName, $conditions, $column)
  * @param string $tableName
  * @param array  $dataToInsert
  */
-function insert($tableName, $dataToInsert)
+function insertData($tableName, $dataToInsert)
 {
     try {
         Capsule::table($tableName)->insert($dataToInsert);
@@ -142,7 +109,7 @@ function insert($tableName, $dataToInsert)
  * @param array  $conditions
  * @param array  $dataToUpdate
  */
-function update($tableName, $conditions, $dataToUpdate)
+function updateData($tableName, $conditions, $dataToUpdate)
 {
     try {
         $gerencianetData = Capsule::table($tableName);
@@ -152,28 +119,6 @@ function update($tableName, $conditions, $dataToUpdate)
         }
 
         $gerencianetData->update($dataToUpdate);
-
-    } catch (\Exception $e) {
-        showException('DataBase Exception', array($e->getMessage()));
-    } 
-}
-
-/**
- * Delete a record from the database
- *
- * @param string $tableName
- * @param array  $conditions
- */
-function delete($tableName, $conditions)
-{
-    try {
-        $gerencianetData = Capsule::table($tableName);
-
-        foreach ($conditions as $key => $value) {
-            $gerencianetData = $gerencianetData->where($key, $value);
-        }
-
-        $gerencianetData->delete();
 
     } catch (\Exception $e) {
         showException('DataBase Exception', array($e->getMessage()));

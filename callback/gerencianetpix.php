@@ -61,7 +61,7 @@ if (empty($pixPaymentData)) {
         ];
     
         // Saving e2eid in table 'tblgerencianetpix'
-        update($tableName, $conditions, $dataToUpdate);
+        updateData($tableName, $conditions, $dataToUpdate);
     
         if($success) {
             $paymentFee = '0.00';

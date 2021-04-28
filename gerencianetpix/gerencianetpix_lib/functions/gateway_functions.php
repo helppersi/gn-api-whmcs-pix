@@ -95,7 +95,7 @@ function storePixChargeInfo($pix, $gatewayParams)
         'locid' => $locId,
     ];
 
-    insert('tblgerencianetpix', $info);
+    insertData('tblgerencianetpix', $info);
 }
 
 /**
